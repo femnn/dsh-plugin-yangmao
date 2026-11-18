@@ -76,7 +76,7 @@ dsh plugin --profile web add /path/to/dsh-plugin-yangmao
 - 运行时数据存在 `$DSH_HOME/plugins/yangmao/data.json`（单文件 JSON，
   每次变更原子写回），删掉它即可回到种子状态。
 
-## 实现说明（对齐 dsh 0.2.2-rc.1 的实际 API）
+## 实现说明（对齐 dsh 0.2.2 线的实际 API）
 
 - Host 插件 `lib/index.js`：`ctx.provide('yangmao', store)` 提供数据服务，
   `ctx.tools.register(defineTool(...))` 注册 7 个工具，
@@ -104,7 +104,7 @@ dsh plugin --profile web add /path/to/dsh-plugin-yangmao
 
 ## 验证
 
-在本机以隔离 `DSH_HOME` 对 dsh 0.2.2-rc.1 做过完整实测：bundle 安装、
+在本机以隔离 `DSH_HOME` 对 dsh 0.2.2-rc.1 做过完整实测、并在 0.2.2-rc.3 复测通过（v0.1.1 起 peer 依赖放宽为 `>=0.2.2-rc.1 <0.3.0`，覆盖整个 0.2.2 线）：bundle 安装、
 `--dump-config` 合入、服务启动与插件激活、看板页/API/标记落盘、
 数据层单测；Client 半另有无头自测（`scripts/selftest-client.mjs`，
 34 项断言）与宿主 combo 下发实测（启动页 boot graph 含本包 client

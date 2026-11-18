@@ -160,3 +160,9 @@ Client 半。回归检查：`GET /plugins/yangmao` 仍 200 7,564B，
   Web UI 看一眼才能最终确认——无头环境无法代替。
 - **工具被模型实际调用**：需要可用的模型 API Key 才能跑 agent 会话，
   本次以「apply 完成 + 无激活警告」为注册成功证据，未做端到端对话调用。
+
+## v0.1.1 兼容修复（2026-11-18 晚）
+
+- 起因：桌面版 DSH 0.2.2-rc.3 的插件安装器按 peerDependencies 严格校验，v0.1.0 把 `@deepseek-ai/dsh-tools` 钉死 `0.2.2-rc.1`，被判不兼容拒绝安装。
+- 修复：peer 放宽为 `>=0.2.2-rc.1 <0.3.0`，版本升 0.1.1。
+- 复测（隔离 DSH_HOME + dsh 0.2.2-rc.3 运行时）：`dsh plugin --profile web add <本地路径>` 成功；`--dump-config` 末尾合入 yangmao / yangmao-web 两行；启动日志 `[yangmao] ready: 269 deals, boards radar=18 tokens=14 vps=41` + `board page at /plugins/yangmao`，无报错；curl 看板页 200 7564B、`/api/state` 返回真实数据。

@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-yangmao",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "薅羊毛情报看板 for DeepSeek Harness (dsh): deals board + radar/tokens/vps boards as agent tools, a sidebar panel page in the Web UI, and a refresh skill with official-source-only data rules.",
   "type": "module",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": "0.2.2-rc.1"
+    "@deepseek-ai/dsh-tools": ">=0.2.2-rc.1 <0.3.0"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "~3.19.0"
