@@ -57,9 +57,8 @@ const fakeState = {
       source_name: 'LINUX DO', verified_at: '2026-11-18T00:00:00.000Z', read: false,
     }],
     tokens: [],
-    vps: [],
   },
-  stats: { total_deals: 2, live_deals: 2, boards: { radar: 1, tokens: 0, vps: 0 }, last_refreshed_at: '2026-11-18T01:00:00.000Z' },
+  stats: { total_deals: 2, live_deals: 2, boards: { radar: 1, tokens: 0 }, last_refreshed_at: '2026-11-18T01:00:00.000Z' },
   auto: { available: true, enabled: true, taskId: 'task-1', nextRunAt: '2026-11-19T04:45:13.000Z', lastDeliveryAt: null },
 };
 
@@ -239,7 +238,11 @@ strings = collectStrings(runtime.tree());
 assert(!strings.some((s) => s === '标记已领取'), 'after marking, no 标记已领取 button remains (both deals claimed)');
 const cardA = findNodes(runtime.tree(), (n) => n.type === 'article'
   && collectStrings(n).some((s) => s.includes('甲渠道免费额度')))[0];
-assert(cardA && cardA.props.style && cardA.props.style.opacity === 0.55, 'claimed card A is dimmed (opacity .55)');
+assert(cardA && cardA.props.style && cardA.props.style.opacity === 0.6, 'claimed card A is dimmed (opacity .6)');
+const stamps = findNodes(runtime.tree(), (n) => n.type === 'span' && n.props.style
+  && String(n.props.style.transform || '').includes('rotate'));
+assert(stamps.length >= 2 && stamps.some((s) => collectStrings(s).some((x) => x === '已领取')),
+  'claimed cards carry the rotated 已领取 stamp');
 
 const radarTab = findNodes(runtime.tree(), (n) => n.type === 'button'
   && collectStrings(n).some((s) => s === '雷达帖'))[0];

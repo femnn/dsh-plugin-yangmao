@@ -8,17 +8,18 @@
 
 ## 功能
 
-- **主清单 deals**：269 条（种子快照，2026-11-18），分类
+- **主清单 deals**：255 条（种子快照，2026-11-18，已按下方
+  「内容边界」清洗），分类
   `food / shop / telecom / bank / member / cloud / llm`，
   每条带权益、领法、平台、绑卡要求、限制、来源与核查时间 `verified_at`。
-- **三块侧板**：`radar` 社区雷达帖 18 条（未经核实的线索）、
-  `tokens` 免费大模型额度总汇 14 条、`vps` 低价 VPS 捡漏 41 条。
+- **两块侧板**：`radar` 社区雷达帖 15 条（未经核实的线索）、
+  `tokens` 免费大模型额度总汇 14 条。
 - **智能体工具**（`ctx.tools`）：
   | 工具 | 作用 |
   |---|---|
   | `yangmao_search` | 按分类/关键词查主清单（过期默认隐藏，已领取沉底） |
   | `yangmao_featured` | 今日精选：最近核查的未过期条目 |
-  | `yangmao_boards` | 查雷达 / Token / VPS 三板块 |
+  | `yangmao_boards` | 查雷达 / Token 两板块 |
   | `yangmao_add` | 新增一条已核实的羊毛 |
   | `yangmao_mark` | 标记已领取 / 收藏 / 已读（或取消） |
   | `yangmao_apply_refresh` | 复核回写：upserts / retire / confirmed + 更新核查时间，过期自动清除 |
@@ -28,7 +29,9 @@
   `GET /plugins/yangmao`（降级/直达用），可按分类/板块浏览、搜索、点标记。
 - **Client 入口**：Web UI 左侧边栏面板行「薅羊毛情报」，点开在中间栏
   整页打开看板（与会话同为 `main` keyed 槽位的两个 key，见下方
-  「实现说明」）；页面功能与直达页一致：精选、分类、搜索、三板块、点标记。
+  「实现说明」）；页面功能与直达页一致：精选、分类、搜索、两板块、点标记。
+  v0.2.0 起整页改为羊皮纸配色（暖纸底、纸纹理、卡片纸面与印章式
+  已领取标记），在深色宿主里像一张铺开的纸。
 - **刷新 skill**（`yangmao-refresh`）：把数据口径写给智能体——
   被要求「刷新羊毛」时它会逐条打开官网原文核对，再用
   `yangmao_apply_refresh` 回写，而不是凭汇总站数字乱写。
@@ -109,6 +112,15 @@ dsh plugin --profile web add /path/to/dsh-plugin-yangmao
   只有真打开来源页核对过，才刷新该条的核查时间。
 - 运行时数据存在 `$DSH_HOME/plugins/yangmao/data.json`（单文件 JSON，
   每次变更原子写回），删掉它即可回到种子状态。
+- **内容边界（合规）**：本插件不收录 VPS / 云服务器类租用信息，以及
+  在中国大陆不允许使用的服务类信息——代理 / 节点 / 机场 / VPN /
+  科学上网订阅、海外银行账户、海外手机号、境外云厂商免费层等。
+  规则集中在 `lib/sensitive.js`，三处生效：种子已清洗
+  （`scripts/clean-seed.mjs`）；老版本数据文件在加载时自动清洗并
+  写回（旧 `vps` 板块整体移除）；`yangmao_add` 与
+  `yangmao_apply_refresh` 的落库路径会丢弃命中条目并在结果里
+  计入 `dropped_sensitive`。skill 与自动复核指令里也写明了同一禁区。
+  免费大模型 API 额度（tokens 板块）不在此列。
 
 ## 实现说明（对齐 dsh 0.2.2 线的实际 API）
 
@@ -156,14 +168,16 @@ dsh plugin --profile web add /path/to/dsh-plugin-yangmao
 ## 目录
 
 ```
-lib/index.js    Host 插件：数据服务 + 工具 + skill
+lib/index.js    Host 插件：数据服务 + 工具 + skill + 自动更新子插件
 lib/store.js    JSON 数据层（种子初始化、查询、标记、复核回写）
+lib/sensitive.js 敏感内容规则（种子清洗/加载清洗/落库丢弃共用）
 lib/tools.js    7 个 yangmao_* 工具定义
 lib/skill.js    yangmao-refresh skill（数据口径）
 lib/web.js      Web 子插件：API 与直达页路由
 lib/board.html  直达/降级看板页（单文件）
 lib/client.js   Client 半：侧边栏面板行 + main 整页看板（预构建格式）
 scripts/selftest-client.mjs  Client 半无头自测（stub 宿主/ctx/React）
+scripts/clean-seed.mjs       种子敏感内容清洗（已执行，结果已入库）
 seed/yangmao-seed.json  种子快照（标记全清零）
 skills/yangmao/SKILL.md 同一 skill 的文件版
 cordis.patch.yml        bundle 补丁（两行插件）

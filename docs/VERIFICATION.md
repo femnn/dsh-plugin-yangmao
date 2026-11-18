@@ -178,3 +178,20 @@ Client 半。回归检查：`GET /plugins/yangmao` 仍 200 7,564B，
 - `POST /api/refresh-now` 返回 `{ok:true, message:'已发起更新，…'}`；随后 `auto.lastDeliveryAt` 落值，且目标会话文件出现在 `storages/session_projcache/sessions/` 并含投递的复核指令全文——投递机制端到端打通。
 - 删除尊重实测：手工从 schedule.json 移除任务（模拟用户在自动化任务页删除）后重启，日志 `auto refresh task missing (removed by user); not recreating`，`meta.autoTaskGone=true` 落盘，任务未被重建，`auto.enabled=false`；此状态下再调 refresh-now：任务被重建（新 id）、墓碑清除、立即投递成功。
 - 边界（如实记录）：隔离环境无模型 API Key，投递进会话的复核指令不会被智能体真正执行完，复核回写本身未在本轮验证；像素级渲染（按钮与状态行在真实 Web UI 的样子）仍需人工看一眼。
+
+## v0.2.0 第二阶段：羊皮纸界面 + 敏感内容清洗（2026-11-18 晚）
+
+### 敏感内容清洗
+
+- 规则集中在 `lib/sensitive.js`（关键词 + 词边界正则，只扫内容字段，不扫来源名/来源链接），种子清洗脚本、store 加载清洗、addDeal/applyRefresh 落库丢弃三处共用。
+- 规则集先对种子全量条目做人工逐条评审定版，再用脚本模拟核对：规则丢弃集与人工评审集**完全一致**（零误伤、零漏网），且对清洗后的种子幂等（再跑丢弃 0 条）。
+- 种子结果：deals 269 → **255**（删 14：云服务器/轻量/ECS/Flexus 类 13 条 + 天翼云通用 IaaS 试用体验金 1 条）；radar 18 → **15**（删 3：Oracle Cloud 注册帖、海外卡返现叠加帖、天翼云 AI 电脑白嫖帖）；tokens 14 → **14**（无删除）；`vps` 板块 41 条整体删除。cloud 分类 15 → 1（仅剩华为云码道 AI 积分）。
+- 数据层单测（临时目录构造老格式数据）：加载清洗把敏感 deals 与 vps 板块清掉并写回磁盘；`addDeal` 命中敏感返回 null（丢弃）、正常条目照常新增；`applyRefresh` 命中敏感的 upsert 被丢弃且返回 `dropped_sensitive: 1`，正常 upsert 照常更新。
+- rc.3 旧 home 实测（data.json 为清洗前状态：269 条 + vps 41）：首次启动日志 `sensitive purge on load: dropped {"deals":13,"radar":2,"tokens":0,"vps":41}`；补强两条窄规则（`ai电脑`、`免费试用中心`）后第二次启动再清 deals 1 + radar 1，ready 行收敛为 `255 deals, boards radar=15 tokens=14`，与种子完全一致；`/api/state` 的 boards 只剩 radar/tokens，自动任务照常采用为 active，refresh-now 照常 ok。
+- 如实记录一处保留：第 439 条（腾讯云 TokenHub 大模型额度，内容合规）的来源名是博客名「VPS录」、来源链接域名为 vpslu.com——属来源标注而非 VPS 服务信息，规则按设计不扫来源字段，故保留；如需连来源标注一并处理，可另行 anonymize。
+- 口径说明：tokens 板块与 llm 分类里的境外大模型 API 免费额度（OpenRouter、Groq、Google AI Studio 等）按「免费大模型 API」本行保留，禁区针对的是 IaaS 免费层；国内银行的境外消费优惠、国内运营商 eSIM 业务经逐条核对后保留。
+
+### 羊皮纸界面
+
+- `lib/client.js` 整页换自包含羊皮纸色板（不再依赖宿主主题 token）：纸底 #f4ead5 + 三层渐变（顶部高光 + 横竖双向重复线性渐变）叠出纸纹/纤维感，内阴影做出纸边与暗角；卡片 #fffaf0 米白纸面 + 双层柔和阴影，悬停上浮 2px 并加深阴影；分类页签为纸标签（浅纸描边，选中 #e8590c 填充白字）；已领取卡片变淡并盖一枚旋转 -8° 的描边印章「已领取」，已读条目同款「已读」印章，收藏用橙色 ★ 标记区分；标题下加双线装饰分隔；「立即更新」为橙色实心胶囊按钮；搜索框用内阴影做纸面凹陷，聚焦时橙色描边光圈。正文 13px、行高 1.6，标题 16/22px 拉开层级。
+- `scripts/selftest-client.mjs` **41 项全过**（新增印章断言，断言数随结构更新）。像素级观感仍需在真实 Web UI 里人工看一眼（与前几轮同一边界）。

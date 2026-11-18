@@ -44,14 +44,14 @@
 <script>
 const API = location.pathname.replace(/\/?$/, '');
 const CATS = [['', '全部'], ['food', '美食'], ['shop', '购物'], ['telecom', '通信'], ['bank', '银行'], ['member', '会员'], ['cloud', '云服务'], ['llm', '大模型']];
-const BOARDS = [['radar', '雷达帖'], ['tokens', 'Token 总汇'], ['vps', 'VPS 捡漏']];
+const BOARDS = [['radar', '雷达帖'], ['tokens', 'Token 总汇']];
 let state = null, tab = '', keyword = '';
 
 async function load() {
   const r = await fetch(API + '/api/state');
   state = await r.json();
   document.getElementById('meta').textContent =
-    `主清单 ${state.stats.total_deals} 条（在架 ${state.stats.live_deals}）· 雷达 ${state.stats.boards.radar} · Token ${state.stats.boards.tokens} · VPS ${state.stats.boards.vps} · 最近复核 ${state.stats.last_refreshed_at ? new Date(state.stats.last_refreshed_at).toLocaleString('zh-CN') : '—'}`;
+    `主清单 ${state.stats.total_deals} 条（在架 ${state.stats.live_deals}）· 雷达 ${state.stats.boards.radar} · Token ${state.stats.boards.tokens} · 最近复核 ${state.stats.last_refreshed_at ? new Date(state.stats.last_refreshed_at).toLocaleString('zh-CN') : '—'}`;
   render();
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
