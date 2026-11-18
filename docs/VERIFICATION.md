@@ -71,13 +71,92 @@ addDeal / markDeal / applyRefresh / 重新加载，全部符合预期：
 telecom:35, bank:37, member:42, cloud:15, llm:89}, boards:{radar:18,
 tokens:14, vps:41}}`；refresh 回写后字段更新与 claimed 标记均正确持久化。
 
+## 6. 第二轮（2026-11-18）：Client 半纠正——侧边栏入口 + 整页看板
+
+第一轮关于客户端框架的结论是错的，特此纠正：`main` 不是「会话独占
+单槽」，而是 **keyed 槽位**，按侧边栏选中的面板 id 派发；没选面板时
+宿主回落到 key `conversation` 显示会话——插件页与会话是同一个槽的
+两个 key。标准做法见实测教程《从零写一个 DSH 插件：在左侧菜单栏
+加一个「测试」》（代码装进 web profile 验证生效）：
+https://jishuzhan.net/article/2117461349811617794
+
+本轮改动：
+
+- `lib/client.js` 重写：`__ModuleLoader__` 外壳（id = 包名），factory
+  只 `require('react')`，返回 `{ inject: ['slots', 'locale'], apply }`；
+  apply 三步——`ctx.effect(() => ctx.locale.register('yangmao', { zh, en }))`
+  注册字典 → `ctx.slots.inject('main', …)` 注册
+  `{ name: 'main', key: 'yangmao', locale: 'yangmao' }` + 看板页组件 →
+  `ctx.slots.inject('sidebar.panellist', …)` 注册
+  `{ name: 'sidebar.panellist', id: 'yangmao', order: 30, locale: 'yangmao', label: () => t('panel') }`
+  + 手写 SVG 图标组件（宿主传 `size`/`active`，`currentColor` 描边）。
+  页面组件手写 React（主题 token 样式、自己处理滚动），挂载时 fetch
+  同源 `/plugins/yangmao/api/state`，含今日精选（未领取优先）、
+  分类/三板块切换、搜索、条目卡片（已领取沉底变淡）、标记按钮
+  POST `/plugins/yangmao/api/mark` 后本地刷新；加载中/失败有明示
+  状态与重试，不白屏。
+- `package.json` 的 `dsh.client` 改为 `platform: 'web'`、
+  `immediately: true`、inject
+  `['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-sidebar']`
+  （仅激活排序依赖）。
+- 已删除旧做法：`shell.overlay` 悬浮入口 + iframe。Host 路由页保留
+  为直达/降级页；`lib/web.js` 仅更新了头部注释，路由实现未动。
+
+### 自测（无头，stub 宿主装配面）
+
+`scripts/selftest-client.mjs`：以 stub 的 `window.__ModuleLoader__`、
+Cordis ctx（slots/locale/effect）与极小 React hook 运行时加载
+`lib/client.js` 并驱动组件。结果 **34 passed, 0 failed**，覆盖：
+
+- 外壳：load 被调用、id = `dsh-plugin-yangmao`、factory 返回
+  `inject: ['slots', 'locale']` 与 apply；
+- apply：字典以 namespace `yangmao` 经 ctx.effect 注册（zh 面板名
+  「薅羊毛情报」、en 字典齐备）；slots.inject 恰好两处
+  （`main`、`sidebar.panellist`）；回调触发的 register 参数精确
+  （main 的 key/locale、panellist 的 id/order=30/locale，
+  label() 经字典解析为「薅羊毛情报」）；
+- 图标：按宿主 size 渲染 `<svg>`；
+- 页面：初始为加载态 → 数据到达后渲染条目；精选排序未领取在前；
+  点「标记已领取」发出
+  `POST /plugins/yangmao/api/mark {"target":"deal","id":1,"mark":"claimed","value":true}`，
+  本地状态翻转、卡片变淡（opacity .55）；雷达标签页渲染且带
+  「社区帖，未经官网核实」注记；搜索按关键词过滤；
+- 错误路径：fetch 拒绝时呈现「加载失败」+「重试」，不白屏。
+
+### 重装与宿主下发实测（同一隔离环境）
+
+```console
+$ dsh plugin --profile web add /home/hatch/workspace/dsh-plugin-yangmao
+Already up to date
+Done in 573ms using pnpm v10.34.9        # link: 安装已在位，包内文件即时生效
+
+$ dsh web --dump-config                  # exit 0，末尾仍为本插件两行
+# == dsh-plugin-yangmao
+- id: yangmao
+  name: dsh-plugin-yangmao
+- id: yangmao-web
+  name: dsh-plugin-yangmao/web
+
+$ dsh web --no-open                      # 启动日志仅 3 行，无 slot/client 报错
+[yangmao] ready: 269 deals, boards radar=18 tokens=14 vps=41, data at .../dsh-home-test/plugins/yangmao/data.json
+[yangmao] board page at /plugins/yangmao
+```
+
+用启动 URL 的一次性 token 换到 auth cookie 后抓取 Web UI 启动页
+（40,430B）：boot graph 的 combo 清单中含独立一条
+`plugins/??dsh-plugin-yangmao/client.js&rev=1d2445c96315`；实际请求
+该 combo 脚本返回 **200, 18,254B**（`lib/client.js` 本体 18,179B，
+差额为 combo 框架字节），内容含 `sidebar.panellist`（3 处）、
+`yangmao: dictionaries` 与 `薅羊毛情报`——宿主确实在下发新版
+Client 半。回归检查：`GET /plugins/yangmao` 仍 200 7,564B，
+`GET /plugins/yangmao/api/state` 正常返回种子数据。
+
 ## 未验证项（如实）
 
-- **Client 半（lib/client.js）的浏览器内渲染**：格式逐项对照一厂包
-  `@deepseek-ai/dsh-client-ui-jobs` 的产物手写（`__ModuleLoader__.load` +
-  `./client` 导出 + `dsh.client` 声明），但无头环境拿不到 Web UI 的
-  一次性 token（`/api/client-modules` 返回 401），未能实测悬浮入口在
-  真实 Web UI 里出现。Host 侧看板页（同一块 UI 的服务端版本）已实测可用，
-  client 半不出现时不影响任何 Host 功能。
+- **Client 半在真实浏览器内的像素级渲染**：模块下发已实测（见
+  第 6 节），组件逻辑已由无头自测覆盖（stub 的 slots/locale/React
+  运行时）；但侧边栏行与整页看板在真实 Web UI 里的实际呈现
+  （主题 token 对比度、宿主传入 props 的细节差异）仍需人工打开
+  Web UI 看一眼才能最终确认——无头环境无法代替。
 - **工具被模型实际调用**：需要可用的模型 API Key 才能跑 agent 会话，
   本次以「apply 完成 + 无激活警告」为注册成功证据，未做端到端对话调用。
