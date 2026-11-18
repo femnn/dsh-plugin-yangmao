@@ -12,7 +12,10 @@
 //   5. the page component: loading state -> loaded state (featured
 //      ordering: unclaimed before claimed), mark button issues the
 //      right POST and flips local state, radar tab renders, search
-//      filters, and a rejecting fetch yields the error state (no blank)
+//      filters, the header shows the auto-refresh status line, the
+//      立即更新 button POSTs /api/refresh-now (disabled while pending,
+//      server message shown after), and a rejecting fetch yields the
+//      error state (no blank)
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -57,6 +60,7 @@ const fakeState = {
     vps: [],
   },
   stats: { total_deals: 2, live_deals: 2, boards: { radar: 1, tokens: 0, vps: 0 }, last_refreshed_at: '2026-11-18T01:00:00.000Z' },
+  auto: { available: true, enabled: true, taskId: 'task-1', nextRunAt: '2026-11-19T04:45:13.000Z', lastDeliveryAt: null },
 };
 
 // ---------- minimal React hook runtime ----------
@@ -124,6 +128,10 @@ let captured = null;
 const sandbox = {
   window: { __ModuleLoader__: { load(spec) { captured = spec; } } },
   fetch: (...args) => fetchBehavior(...args),
+  // The page's 60s polling effect uses interval timers; stub them out so
+  // the test never actually waits or re-fetches.
+  setInterval: () => 1,
+  clearInterval: () => {},
   console,
 };
 vm.runInNewContext(clientCode, sandbox, { filename: 'client.js' });
@@ -191,9 +199,19 @@ assert(iconTree.type === 'svg' && iconTree.props.width === 16 && iconTree.props.
 
 // ---------- page component: loading -> loaded -> mark -> tabs ----------
 console.log('[page]');
-fetchBehavior = async (url, opts) => {
+let resolveRefresh = null;
+fetchBehavior = (url, opts) => {
   fetchCalls.push({ url, opts });
-  return { ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(fakeState)) };
+  if (url === '/plugins/yangmao/api/refresh-now') {
+    // Deferred: the test resolves it by hand to observe the pending state.
+    return new Promise((resolve) => {
+      resolveRefresh = () => resolve({
+        ok: true, status: 200,
+        json: async () => ({ ok: true, message: '已发起更新，复核会在后台会话中进行，完成后本页数据自动刷新' }),
+      });
+    });
+  }
+  return Promise.resolve({ ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(fakeState)) });
 };
 const t = ctxStub.locale.bind('yangmao');
 runtime.mount(mainReg.component, { t });
@@ -240,6 +258,31 @@ input.props.onChange({ target: { value: '甲渠道' } });
 strings = collectStrings(runtime.tree());
 assert(strings.some((s) => s.includes('甲渠道免费额度')) && !strings.some((s) => s.includes('乙餐厅买一送一')),
   'search filters the deal list by keyword');
+
+// ---------- page component: auto-refresh status + 立即更新 ----------
+console.log('[page auto-refresh]');
+strings = collectStrings(runtime.tree());
+assert(strings.some((s) => s.includes('每 12 小时自动更新') && s.includes('下次')),
+  'header shows the auto-refresh status line with the next run time');
+const refreshBtn = findNodes(runtime.tree(), (n) => n.type === 'button'
+  && collectStrings(n).some((s) => s === '立即更新'))[0];
+assert(!!refreshBtn, 'header shows a 立即更新 button');
+refreshBtn.props.onClick();
+const pendingBtn = findNodes(runtime.tree(), (n) => n.type === 'button'
+  && collectStrings(n).some((s) => s === '正在发起…'))[0];
+assert(!!pendingBtn && pendingBtn.props.disabled === true,
+  'while the request is in flight the button is disabled and relabelled');
+const refreshCall = fetchCalls.find((c) => c.url === '/plugins/yangmao/api/refresh-now');
+assert(!!refreshCall && refreshCall.opts && refreshCall.opts.method === 'POST',
+  'refresh button issues POST /plugins/yangmao/api/refresh-now');
+resolveRefresh();
+await flush();
+strings = collectStrings(runtime.tree());
+assert(strings.some((s) => s.includes('已发起更新，复核会在后台会话中进行')),
+  'the server message is shown next to the button after refresh starts');
+const doneBtn = findNodes(runtime.tree(), (n) => n.type === 'button'
+  && collectStrings(n).some((s) => s === '立即更新'))[0];
+assert(!!doneBtn && !doneBtn.props.disabled, 'button is enabled again once the request settles');
 
 // ---------- page component: error state ----------
 console.log('[page error path]');

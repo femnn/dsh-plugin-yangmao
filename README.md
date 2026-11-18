@@ -32,6 +32,9 @@
 - **刷新 skill**（`yangmao-refresh`）：把数据口径写给智能体——
   被要求「刷新羊毛」时它会逐条打开官网原文核对，再用
   `yangmao_apply_refresh` 回写，而不是凭汇总站数字乱写。
+- **自动更新**（v0.2.0 起）：插件在宿主里注册一个每 12 小时的定时
+  复核任务，看板页头部有「立即更新」按钮可随时手动发起一次，
+  详见下方「自动更新」一节。
 
 ## 安装
 
@@ -63,6 +66,37 @@ dsh plugin --profile web add /path/to/dsh-plugin-yangmao
     dataDir: '/some/dir'   # 数据文件目录，默认 $DSH_HOME/plugins/yangmao
 ```
 
+## 自动更新
+
+插件带一个子插件 `yangmao-auto`，依赖宿主的定时任务服务
+（`ctx.schedule`）。宿主提供该服务时（桌面版与 `dsh web` 的
+自动化任务功能即基于它），插件首次启动会自动创建一个定时任务：
+
+- **任务**：标题「薅羊毛情报 · 自动复核」，每 **12 小时**投递一次，
+  投递目标是一个专用会话（首次投递时创建、之后复用同一个会话，
+  历次复核在同一会话里连续可见）。
+- **投递内容**：一段自包含的复核指令（不依赖 skill 是否被加载）：
+  先 `yangmao_stats` 看现状，优先复核已过期/临近过期/核查时间最早
+  的条目，金额/门槛/免费量只认官网原文、社区帖只作线索，顺带搜集
+  少量新情报，最后整理成一次 `yangmao_apply_refresh` 提交，不动
+  用户的已领取/收藏/已读标记，并一句话汇报复核/下架/新增数量。
+- **管理**：任务会出现在宿主的「自动化任务」页面，可在那里暂停或
+  删除。**在那里把任务删掉，插件会尊重这个决定**：任务 id 与删除
+  状态记在数据文件的 `meta` 里（`autoTaskId` / `autoTaskGone`），
+  重启不会重建；想恢复自动更新时，点看板页的「立即更新」即可
+  （会重建任务并立即跑一次）。
+- **手动更新**：看板页头部的「立即更新」按钮调
+  `POST /plugins/yangmao/api/refresh-now`，让任务立即投递一次；
+  旁边一行小字显示自动更新状态与下次运行时间（来自
+  `/api/state` 的 `auto` 字段）。看板页打开期间每 60 秒自动
+  重新拉取数据，后台复核写回后无需手动刷新页面。
+- **没有定时任务服务的宿主**：子插件不启用，`auto` 字段返回
+  `available: false`，「立即更新」会明确提示无法发起；看板、工具
+  与手动对话复核（「刷新羊毛」）照常工作。
+- 任务在宿主重启后保留（宿主侧持久化）。注意：定时投递只是把指令
+  送进会话，实际复核由会话里的智能体执行，需要宿主已配置可用的
+  模型；无模型时任务照常投递，但复核不会真正完成。
+
 ## 数据来源与口径
 
 - 种子数据是作者维护的「薅羊毛情报」看板在 2026-11-18 的公开快照，
@@ -80,7 +114,13 @@ dsh plugin --profile web add /path/to/dsh-plugin-yangmao
 
 - Host 插件 `lib/index.js`：`ctx.provide('yangmao', store)` 提供数据服务，
   `ctx.tools.register(defineTool(...))` 注册 7 个工具，
-  `ctx.skills.register(...)` 注册刷新 skill。
+  `ctx.skills.register(...)` 注册刷新 skill；另以 `ctx.plugin(...)`
+  注册子插件 `yangmao-auto`（`inject: ['schedule']`，宿主无此服务时
+  不启用），维护自动复核任务，并给 store 挂上
+  `getAutoStatus()` / `refreshNow()` 供 Web 子插件调用。
+  一个实现细节：宿主在启动早期会拒绝创建 `new_once` 任务（会话创建
+  提供方尚未注册），子插件的对账会在该提供方出现时及定时重试，
+  直到落定（采用/创建/墓碑三者之一）。
 - Web 子插件 `lib/web.js`（patch 里的第二行 `dsh-plugin-yangmao/web`）：
   依赖 `webServer` 与 `yangmao` 服务，用一条 prefix 路由托管看板页与 API
   （resource 路由只答 GET/HEAD，故用 handler 形态以便 POST 标记）。

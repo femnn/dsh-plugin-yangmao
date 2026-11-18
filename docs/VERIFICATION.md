@@ -166,3 +166,15 @@ Client 半。回归检查：`GET /plugins/yangmao` 仍 200 7,564B，
 - 起因：桌面版 DSH 0.2.2-rc.3 的插件安装器按 peerDependencies 严格校验，v0.1.0 把 `@deepseek-ai/dsh-tools` 钉死 `0.2.2-rc.1`，被判不兼容拒绝安装。
 - 修复：peer 放宽为 `>=0.2.2-rc.1 <0.3.0`，版本升 0.1.1。
 - 复测（隔离 DSH_HOME + dsh 0.2.2-rc.3 运行时）：`dsh plugin --profile web add <本地路径>` 成功；`--dump-config` 末尾合入 yangmao / yangmao-web 两行；启动日志 `[yangmao] ready: 269 deals, boards radar=18 tokens=14 vps=41` + `board page at /plugins/yangmao`，无报错；curl 看板页 200 7564B、`/api/state` 返回真实数据。
+
+## v0.2.0 自动更新（2026-11-18 晚）
+
+环境：dsh 0.2.2-rc.3 隔离 DSH_HOME（两套：旧 home 复用、新 home 全新）。
+
+- `node --check` 全部 lib 文件通过；`scripts/selftest-client.mjs` **40 项全过**（原 34 + 新增 6：自动更新状态行渲染、立即更新按钮、请求中禁用防重复、POST /api/refresh-now、服务端 message 展示、请求结束恢复可用）。自测沙箱补了 setInterval/clearInterval stub，对应页面新增的 60 秒轮询 effect。
+- 全新 home 启动实测：插件装载后首轮对账被宿主拒绝（`This Host cannot create Sessions`——会话创建提供方尚未注册，属启动时序），子插件的重试随后自动建成任务，日志 `[yangmao] auto refresh task created: id=schedule-e46eced7-… every=43200s next=2026-11-19T00:35:49.139Z`（next 恰为创建时刻 +12h）。
+- 持久化核对：`$DSH_HOME/storages/schedule.json` 中有标题「薅羊毛情报 · 自动复核」的任务记录；`data.json` 的 `meta.autoTaskId` 与任务 id 一致。
+- `GET /api/state` 的 `auto` 字段：`{available:true, enabled:true, taskId, nextRunAt}` 与宿主一致。
+- `POST /api/refresh-now` 返回 `{ok:true, message:'已发起更新，…'}`；随后 `auto.lastDeliveryAt` 落值，且目标会话文件出现在 `storages/session_projcache/sessions/` 并含投递的复核指令全文——投递机制端到端打通。
+- 删除尊重实测：手工从 schedule.json 移除任务（模拟用户在自动化任务页删除）后重启，日志 `auto refresh task missing (removed by user); not recreating`，`meta.autoTaskGone=true` 落盘，任务未被重建，`auto.enabled=false`；此状态下再调 refresh-now：任务被重建（新 id）、墓碑清除、立即投递成功。
+- 边界（如实记录）：隔离环境无模型 API Key，投递进会话的复核指令不会被智能体真正执行完，复核回写本身未在本轮验证；像素级渲染（按钮与状态行在真实 Web UI 的样子）仍需人工看一眼。
