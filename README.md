@@ -36,8 +36,8 @@
 ## 安装
 
 ```bash
-# 从 npm / GitHub 安装（发布后）
-dsh plugin --profile web add dsh-plugin-yangmao
+# 从 GitHub 安装（推荐）
+dsh plugin --profile web add github:femnn/dsh-plugin-yangmao
 
 # 或本地目录调试
 dsh plugin --profile web add /path/to/dsh-plugin-yangmao
