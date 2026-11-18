@@ -1,0 +1,11 @@
+# dsh-plugin-yangmao bundle patch: adds the yangmao host plugin (data store
+# service + agent tools + refresh skill) and its web companion (board page
+# routes on the host webServer). The package's client half is discovered
+# from the same loader entry via the `dsh.client` declaration in
+# package.json, so it needs no row of its own.
+- insert:
+    - id: yangmao
+      name: 'dsh-plugin-yangmao'
+
+    - id: yangmao-web
+      name: 'dsh-plugin-yangmao/web'

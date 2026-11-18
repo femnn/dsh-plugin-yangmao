@@ -1,0 +1,47 @@
+{
+  "name": "dsh-plugin-yangmao",
+  "version": "0.1.0",
+  "description": "薅羊毛情报看板 for DeepSeek Harness (dsh): deals board + radar/tokens/vps boards as agent tools, a host-served board page, and a refresh skill with official-source-only data rules.",
+  "type": "module",
+  "license": "MIT",
+  "author": "kangkang",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "yangmao",
+    "deals"
+  ],
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./web": "./lib/web.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "seed",
+    "skills",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.19.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ],
+      "platform": "web"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+# The live data file is created next to DSH_HOME at runtime, never in the repo.
+data.json
+package-lock.json

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>薅羊毛情报看板</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f6f6f4; color: #1c1c1a; }
+  @media (prefers-color-scheme: dark) { body { background: #17181a; color: #ececea; } }
+  header { padding: 16px 20px 8px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { font-size: 12px; opacity: .65; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 20px; position: sticky; top: 0; background: inherit; z-index: 2; }
+  nav button { border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  nav button.on { background: #e8590c; border-color: #e8590c; color: #fff; }
+  .search { padding: 0 20px 6px; }
+  .search input { width: 100%; max-width: 420px; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; font-size: 14px; }
+  main { padding: 6px 20px 40px; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .card { border: 1px solid rgba(128,128,128,.3); border-radius: 12px; padding: 12px 14px; background: rgba(128,128,128,.06); display: flex; flex-direction: column; gap: 6px; }
+  .card.claimed { opacity: .55; }
+  .card h3 { margin: 0; font-size: 15px; line-height: 1.45; }
+  .card h3 a { color: inherit; text-decoration: none; }
+  .card h3 a:hover { text-decoration: underline; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: rgba(232,89,12,.16); color: #e8590c; margin-right: 6px; vertical-align: 2px; }
+  .body { font-size: 13px; line-height: 1.55; opacity: .9; white-space: pre-wrap; word-break: break-word; }
+  .sub { font-size: 12px; opacity: .6; }
+  .acts { margin-top: auto; display: flex; gap: 8px; padding-top: 4px; }
+  .acts button { border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .acts button.done { background: #2f9e44; border-color: #2f9e44; color: #fff; }
+  .empty { padding: 30px 20px; opacity: .6; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐑 薅羊毛情报看板</h1>
+  <div class="meta" id="meta">加载中…</div>
+</header>
+<nav id="tabs"></nav>
+<div class="search"><input id="q" type="search" placeholder="搜索标题 / 权益 / 平台…"></div>
+<main id="list"></main>
+<div class="empty" id="empty" hidden>没有符合条件的条目。</div>
+<script>
+const API = location.pathname.replace(/\/?$/, '');
+const CATS = [['', '全部'], ['food', '美食'], ['shop', '购物'], ['telecom', '通信'], ['bank', '银行'], ['member', '会员'], ['cloud', '云服务'], ['llm', '大模型']];
+const BOARDS = [['radar', '雷达帖'], ['tokens', 'Token 总汇'], ['vps', 'VPS 捡漏']];
+let state = null, tab = '', keyword = '';
+
+async function load() {
+  const r = await fetch(API + '/api/state');
+  state = await r.json();
+  document.getElementById('meta').textContent =
+    `主清单 ${state.stats.total_deals} 条（在架 ${state.stats.live_deals}）· 雷达 ${state.stats.boards.radar} · Token ${state.stats.boards.tokens} · VPS ${state.stats.boards.vps} · 最近复核 ${state.stats.last_refreshed_at ? new Date(state.stats.last_refreshed_at).toLocaleString('zh-CN') : '—'}`;
+  render();
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function hit(text) { return !keyword || String(text ?? '').toLowerCase().includes(keyword); }
+
+async function mark(target, id, mk, value, btn) {
+  btn.disabled = true;
+  await fetch(API + '/api/mark', { method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({ target, id, mark: mk, value }) });
+  await load();
+}
+
+function dealCard(d) {
+  const el = document.createElement('article');
+  el.className = 'card' + (d.claimed ? ' claimed' : '');
+  el.innerHTML = `<h3><span class="tag">${esc(d.category)}</span><a href="${esc(d.source_url)}" target="_blank" rel="noopener">${esc(d.title)}</a></h3>
+    <div class="body">${esc(d.benefit)}</div>
+    ${d.how_to ? `<div class="body">领法：${esc(d.how_to)}</div>` : ''}
+    <div class="sub">${esc(d.platform || '')}${d.card_req ? ' · ' + esc(d.card_req) : ''}${d.valid_text ? ' · ' + esc(d.valid_text) : ''}</div>
+    <div class="sub">来源：${esc(d.source_name)} · 核查于 ${d.verified_at ? new Date(d.verified_at).toLocaleDateString('zh-CN') : '—'}</div>
+    <div class="acts">
+      <button data-m="claimed" class="${d.claimed ? 'done' : ''}">${d.claimed ? '已领取 ✓' : '标记已领取'}</button>
+      <button data-m="saved" class="${d.saved ? 'done' : ''}">${d.saved ? '已收藏 ★' : '收藏'}</button>
+    </div>`;
+  el.querySelectorAll('button').forEach(b => b.onclick = () => mark('deal', d.id, b.dataset.m, b.dataset.m === 'claimed' ? !d.claimed : !d.saved, b));
+  return el;
+}
+
+function boardCard(board, it) {
+  const el = document.createElement('article');
+  el.className = 'card' + (it.read ? ' claimed' : '');
+  const title = it.title || ((it.provider || '') + ' ' + (it.plan || '')).trim();
+  const link = it.claim_url || it.buy_url || it.source_url;
+  const body = it.detail || it.summary || it.specs || '';
+  const extra = [it.amount, it.price, it.location].filter(Boolean).join(' · ');
+  el.innerHTML = `<h3><a href="${esc(link)}" target="_blank" rel="noopener">${esc(title)}</a></h3>
+    ${extra ? `<div class="body">${esc(extra)}</div>` : ''}
+    <div class="body">${esc(body)}</div>
+    <div class="sub">来源：${esc(it.source_name || '')}${it.verified_at ? ' · 核查于 ' + new Date(it.verified_at).toLocaleDateString('zh-CN') : ''}${board === 'radar' ? ' · 社区帖，未经官网核实' : ''}</div>
+    <div class="acts"><button class="${it.read ? 'done' : ''}">${it.read ? '已读 ✓' : '标记已读'}</button></div>`;
+  el.querySelector('button').onclick = (e) => mark(board, it.id, 'read', !it.read, e.target);
+  return el;
+}
+
+function render() {
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = '';
+  [...CATS, ...BOARDS.map(([k, v]) => ['board:' + k, v])].forEach(([k, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = tab === k ? 'on' : '';
+    b.onclick = () => { tab = k; render(); };
+    tabs.appendChild(b);
+  });
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  let n = 0;
+  if (tab.startsWith('board:')) {
+    const board = tab.slice(6);
+    for (const it of state.boards[board]) {
+      if (!hit([it.title, it.summary, it.detail, it.provider, it.plan, it.specs].join(' '))) continue;
+      list.appendChild(boardCard(board, it)); n++;
+    }
+  } else {
+    for (const d of state.deals) {
+      if (tab && d.category !== tab) continue;
+      if (!hit([d.title, d.benefit, d.how_to, d.platform].join(' '))) continue;
+      list.appendChild(dealCard(d)); n++;
+    }
+  }
+  document.getElementById('empty').hidden = n > 0;
+}
+document.getElementById('q').addEventListener('input', (e) => { keyword = e.target.value.trim().toLowerCase(); render(); });
+load().catch(e => { document.getElementById('meta').textContent = '加载失败：' + e.message; });
+</script>
+</body>
+</html>
