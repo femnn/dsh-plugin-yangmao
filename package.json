@@ -5,6 +5,11 @@
   "type": "module",
   "license": "MIT",
   "author": "kangkang",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femnn/dsh-plugin-yangmao.git"
+  },
+  "homepage": "https://github.com/femnn/dsh-plugin-yangmao#readme",
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
